@@ -11,6 +11,7 @@ eval_interval = 300
 learning_rate = 1e-2
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 eval_iters = 200
+n_embed = 32
 
 torch.manual_seed(1337)
 
@@ -36,8 +37,6 @@ val_data = data[n:]
 # test
 assert ''.join(decode(encode("hello world!"))) == "hello world!"
 
-
-# %% An example
 x = train_data[0: block_size]
 y = train_data[1: block_size + 1]
 for t in range(block_size):
@@ -71,14 +70,16 @@ def estimate_loss():
 
 class BigramLanguageModel(nn.Module):
 
-    def __init__(self, vocab_size):
+    def __init__(self):
         super().__init__()
-        self.token_embedding_table = nn.Embedding(vocab_size, vocab_size)
+        self.token_embedding_table = nn.Embedding(vocab_size, n_embed)
+        self.lm_head = nn.Linear(n_embed, vocab_size)
 
     def forward(self, idx, targets=None):
 
         #idx and targets are both (B, T) tensor of integers
-        logits = self.token_embedding_table(idx) # (B,T,C)
+        token_embeddings = self.token_embedding_table(idx) # (B,T,C)
+        logits = self.lm_head(token_embeddings) # (B,T,vocab_size)
 
         if targets is None:
             loss = None
@@ -103,7 +104,7 @@ class BigramLanguageModel(nn.Module):
             idx = torch.cat([idx, idx_next], dim=1) # (B, T+1)
         return idx
     
-model = BigramLanguageModel(vocab_size)
+model = BigramLanguageModel()
 m = model.to(device)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
