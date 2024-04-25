@@ -115,17 +115,43 @@ class FeedForward(nn.Module):
     def forward(self, x):
         return self.net(x)
 
+class Block(nn.Module):
+    """ Transformer Block. This is everything inside the Nx section of the
+    diagram, without cross attention:
+    - Masked Multi-Head Attention
+    - Add Norm
+    - Feed Forward
+    - Add and Norm
+    """
+
+    def __init__(self, n_embed, n_heads):
+        """
+        n_embed: size of of the token embedding
+        n_head: number of heads in the multi-head attention
+        """
+        super().__init__()
+        head_size = n_embed // n_heads
+        assert head_size * n_heads == n_embed, "n_embed should be divisible by n_heads"
+        self.sa = MultiHeadAttention(n_heads, head_size)
+        self.ffwd = FeedForward(n_embed)
+
+    def forward(self, x):
+        x = self.sa(x)
+        x = self.ffwd(x)
+        return x
+
 class MyTransformer(nn.Module):
 
     def __init__(self):
         super().__init__()
         self.token_embedding_table = nn.Embedding(vocab_size, n_embed)
         self.position_embedding_table = nn.Embedding(block_size, n_embed)
-        n_heads = 4
-        head_size = n_embed // n_heads
-        assert head_size * n_heads == n_embed, "n_embed should be divisible by n_heads"
-        self.sa_heads = MultiHeadAttention(n_heads, head_size)
-        self.ffwd = FeedForward(n_embed)
+        self.blocks = nn.Sequential(
+            Block(n_embed, n_heads=4),
+            Block(n_embed, n_heads=4),
+            Block(n_embed, n_heads=4),
+            Block(n_embed, n_heads=4),
+        )
         self.lm_head = nn.Linear(n_embed, vocab_size)
 
     def forward(self, idx, targets=None):
@@ -138,9 +164,8 @@ class MyTransformer(nn.Module):
         #idx and targets are both (B, T) tensor of integers
         tok_emb = self.token_embedding_table(idx) # (B,T,C)
         pos_emb = self.position_embedding_table(torch.arange(T, device=device)) # (T,C)
-        x = tok_emb + pos_emb # (B,T,C)
-        x = self.sa_heads(x)   # (B,T,C) apply one head of self-attention
-        x = self.ffwd(x)       # (B,T,C) apply feed-forward layer
+        x = tok_emb + pos_emb    # (B,T,C)
+        x = self.blocks(x)       # (B,T,C)
         logits = self.lm_head(x) # (B,T,vocab_size)
 
         if targets is None:
