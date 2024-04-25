@@ -97,9 +97,11 @@ class MultiHeadAttention(nn.Module):
     def __init__(self, n_heads, head_size):
         super().__init__()
         self.heads = nn.ModuleList([Head(head_size) for _ in range(n_heads)])
+        self.proj = nn.Linear(n_embed, n_embed)
 
     def forward(self, x):
         out = torch.cat([h(x) for h in self.heads], dim=-1)
+        out = self.proj(out)
         return out
 
 class FeedForward(nn.Module):
@@ -108,8 +110,11 @@ class FeedForward(nn.Module):
     def __init__(self, n_embed):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(n_embed, n_embed),
+            # In the original paper, the feed forward layer size grows by 4x...
+            nn.Linear(n_embed, 4 * n_embed),
             nn.ReLU(),
+            nn.Linear(4 * n_embed, n_embed),
+            # ...and then projects it back to the original size
         )
 
     def forward(self, x):
@@ -136,8 +141,8 @@ class Block(nn.Module):
         self.ffwd = FeedForward(n_embed)
 
     def forward(self, x):
-        x = self.sa(x)
-        x = self.ffwd(x)
+        x = x + self.sa(x)
+        x = x + self.ffwd(x)
         return x
 
 class MyTransformer(nn.Module):
