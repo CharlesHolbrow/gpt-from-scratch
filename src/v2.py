@@ -137,11 +137,16 @@ class Block(nn.Module):
         super().__init__()
         head_size = n_embed // n_heads
         assert head_size * n_heads == n_embed, "n_embed should be divisible by n_heads"
+        self.ln1 = nn.LayerNorm(n_embed)
+        self.ln2 = nn.LayerNorm(n_embed)
         self.sa = MultiHeadAttention(n_heads, head_size)
         self.ffwd = FeedForward(n_embed)
 
     def forward(self, x):
-        x = x + self.sa(x)
+        normalized = self.ln1(x)
+        x = x + self.sa(normalized)
+
+        normalized = self.ln2(x)
         x = x + self.ffwd(x)
         return x
 
@@ -155,7 +160,7 @@ class MyTransformer(nn.Module):
             Block(n_embed, n_heads=4),
             Block(n_embed, n_heads=4),
             Block(n_embed, n_heads=4),
-            Block(n_embed, n_heads=4),
+            nn.LayerNorm(n_embed),
         )
         self.lm_head = nn.Linear(n_embed, vocab_size)
 
