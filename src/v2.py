@@ -4,14 +4,17 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 # Hyperparameters
-batch_size = 32
-block_size = 8
+batch_size = 32   # Andrej scales this to 65
+block_size = 16   # Andrej scales this to 256
 max_iters = 5_000
 eval_interval = 500
-learning_rate = 1e-3
+learning_rate = 1e-3 # Andrej scales this to 3e-4
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 eval_iters = 200
-n_embed = 32
+n_embed = 36  # Andrej scales this to 384
+n_heads = 3   # Andrej scales this to 6
+n_layer = 3   # Andrej scales this to 6
+dropout = 0.1 # Andrej scales this to 0.2
 
 torch.manual_seed(1337)
 
@@ -77,6 +80,7 @@ class Head(nn.Module):
         self.query = nn.Linear(n_embed, head_size, bias=False)
         self.value = nn.Linear(n_embed, head_size, bias=False)
         self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
         B, T, C = x.shape
@@ -86,6 +90,7 @@ class Head(nn.Module):
         wei = q @ k.transpose(-2, -1) / (C ** -0.5) # (B, T, C) @ (B, C, T) -> (B, T, T)
         wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
         wei = F.softmax(wei, dim=-1) # (B, T, T)
+        wei = self.dropout(wei)
         # perform the weithed aggregation fo the values
         v = self.value(x) # (B, T, C)
         out = wei @ v # (B, T, T) @ (B, T, C) -> (B, T, C)
@@ -98,9 +103,11 @@ class MultiHeadAttention(nn.Module):
         super().__init__()
         self.heads = nn.ModuleList([Head(head_size) for _ in range(n_heads)])
         self.proj = nn.Linear(n_embed, n_embed)
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
         out = torch.cat([h(x) for h in self.heads], dim=-1)
+        out = self.dropout(out)
         out = self.proj(out)
         return out
 
@@ -113,8 +120,9 @@ class FeedForward(nn.Module):
             # In the original paper, the feed forward layer size grows by 4x...
             nn.Linear(n_embed, 4 * n_embed),
             nn.ReLU(),
-            nn.Linear(4 * n_embed, n_embed),
             # ...and then projects it back to the original size
+            nn.Linear(4 * n_embed, n_embed),
+            nn.Dropout(dropout),
         )
 
     def forward(self, x):
@@ -156,12 +164,10 @@ class MyTransformer(nn.Module):
         super().__init__()
         self.token_embedding_table = nn.Embedding(vocab_size, n_embed)
         self.position_embedding_table = nn.Embedding(block_size, n_embed)
-        self.blocks = nn.Sequential(
-            Block(n_embed, n_heads=4),
-            Block(n_embed, n_heads=4),
-            Block(n_embed, n_heads=4),
-            nn.LayerNorm(n_embed),
-        )
+        self.blocks = nn.Sequential(*[
+            Block(n_embed, n_heads=n_heads) for _ in range(n_layer)
+        ])
+        self.ln_f = nn.LayerNorm(n_embed) # final layer norm
         self.lm_head = nn.Linear(n_embed, vocab_size)
 
     def forward(self, idx, targets=None):
@@ -176,6 +182,7 @@ class MyTransformer(nn.Module):
         pos_emb = self.position_embedding_table(torch.arange(T, device=device)) # (T,C)
         x = tok_emb + pos_emb    # (B,T,C)
         x = self.blocks(x)       # (B,T,C)
+        x = self.ln_f(x)         # (B,T,C)
         logits = self.lm_head(x) # (B,T,vocab_size)
 
         if targets is None:
