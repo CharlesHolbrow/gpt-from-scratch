@@ -91,13 +91,27 @@ class Head(nn.Module):
         out = wei @ v # (B, T, T) @ (B, T, C) -> (B, T, C)
         return out
 
+class MultiHeadAttention(nn.Module):
+    """Multiple heads of attention in parallel"""
+
+    def __init__(self, n_heads, head_size):
+        super().__init__()
+        self.heads = nn.ModuleList([Head(head_size) for _ in range(n_heads)])
+
+    def forward(self, x):
+        out = torch.cat([h(x) for h in self.heads], dim=-1)
+        return out
+
 class MyTransformer(nn.Module):
 
     def __init__(self):
         super().__init__()
         self.token_embedding_table = nn.Embedding(vocab_size, n_embed)
         self.position_embedding_table = nn.Embedding(block_size, n_embed)
-        self.sa_head = Head(n_embed)
+        n_heads = 4
+        head_size = n_embed // n_heads
+        assert head_size * n_heads == n_embed, "n_embed should be divisible by n_heads"
+        self.sa_heads = MultiHeadAttention(n_heads, head_size)
         self.lm_head = nn.Linear(n_embed, vocab_size)
 
     def forward(self, idx, targets=None):
@@ -111,7 +125,7 @@ class MyTransformer(nn.Module):
         tok_emb = self.token_embedding_table(idx) # (B,T,C)
         pos_emb = self.position_embedding_table(torch.arange(T, device=device)) # (T,C)
         x = tok_emb + pos_emb # (B,T,C)
-        x = self.sa_head(x)   # (B,T,C) apply one head of self-attention
+        x = self.sa_heads(x)   # (B,T,C) apply one head of self-attention
         logits = self.lm_head(x) # (B,T,vocab_size)
 
         if targets is None:
