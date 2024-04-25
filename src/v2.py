@@ -64,7 +64,7 @@ def estimate_loss():
             X, Y = get_batch(split)
             logits, loss = model(X, Y)
             losses[k] = loss.item()
-        out[split] = losses.mean() # .item()? 
+        out[split] = losses.mean() # .item()?
     model.train()
     return out
 
@@ -102,6 +102,19 @@ class MultiHeadAttention(nn.Module):
         out = torch.cat([h(x) for h in self.heads], dim=-1)
         return out
 
+class FeedForward(nn.Module):
+    """Simple MLP layer with ReLU non-linearity"""
+
+    def __init__(self, n_embed):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(n_embed, n_embed),
+            nn.ReLU(),
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
 class MyTransformer(nn.Module):
 
     def __init__(self):
@@ -112,6 +125,7 @@ class MyTransformer(nn.Module):
         head_size = n_embed // n_heads
         assert head_size * n_heads == n_embed, "n_embed should be divisible by n_heads"
         self.sa_heads = MultiHeadAttention(n_heads, head_size)
+        self.ffwd = FeedForward(n_embed)
         self.lm_head = nn.Linear(n_embed, vocab_size)
 
     def forward(self, idx, targets=None):
@@ -126,6 +140,7 @@ class MyTransformer(nn.Module):
         pos_emb = self.position_embedding_table(torch.arange(T, device=device)) # (T,C)
         x = tok_emb + pos_emb # (B,T,C)
         x = self.sa_heads(x)   # (B,T,C) apply one head of self-attention
+        x = self.ffwd(x)       # (B,T,C) apply feed-forward layer
         logits = self.lm_head(x) # (B,T,vocab_size)
 
         if targets is None:
@@ -137,7 +152,7 @@ class MyTransformer(nn.Module):
             loss = F.cross_entropy(logits, targets)
 
         return logits, loss
-    
+
     def generate(self, idx, max_new_tokens):
         # idx is (B, T) array of indices in the current context
         for _ in range(max_new_tokens):
@@ -152,7 +167,7 @@ class MyTransformer(nn.Module):
             idx_next = torch.multinomial(probs, 1) # (B, 1)
             idx = torch.cat([idx, idx_next], dim=1) # (B, T+1)
         return idx
-    
+
 model = MyTransformer()
 m = model.to(device)
 
