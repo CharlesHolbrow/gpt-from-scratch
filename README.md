@@ -7,6 +7,7 @@ References:
 - Video: https://www.youtube.com/watch?v=kCc8FmEb1nY
 - GitHub: https://github.com/karpathy/ng-video-lecture
 
+[video]:https://www.youtube.com/watch?v=kCc8FmEb1nY
 
 Setup:
 
