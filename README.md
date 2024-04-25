@@ -1,6 +1,6 @@
 # GPT from scratch
 
-These are my notes from following along with [Andrej Karpathy great transformer tutorial video][video]. You probably want his repo, not mine. Writing the code myself is just a way to make sure I properly understand how it all works, and provides a familar playground to experiment and study.
+These are my notes from following along with [Andrej Karpathy great transformer tutorial video][video]. You probably want his repo, not mine. Writing the code myself is just a way to help me learn, and provide a familar playground to experiment and study.
 
 References:
 

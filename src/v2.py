@@ -68,18 +68,26 @@ def estimate_loss():
     model.train()
     return out
 
-class BigramLanguageModel(nn.Module):
+class MyTransformer(nn.Module):
 
     def __init__(self):
         super().__init__()
         self.token_embedding_table = nn.Embedding(vocab_size, n_embed)
+        self.position_embedding_table = nn.Embedding(block_size, n_embed)
         self.lm_head = nn.Linear(n_embed, vocab_size)
 
     def forward(self, idx, targets=None):
+        B, T = idx.shape
+
+        assert T <= block_size, f"Expected timesteps <= {block_size}, got {T}"
+        # There is a unique time embedding vector for each discrete time step.
+        # We will add that to the token embedding.
 
         #idx and targets are both (B, T) tensor of integers
-        token_embeddings = self.token_embedding_table(idx) # (B,T,C)
-        logits = self.lm_head(token_embeddings) # (B,T,vocab_size)
+        tok_emb = self.token_embedding_table(idx) # (B,T,C)
+        pos_emb = self.position_embedding_table(torch.arange(T, device=device)) # (T,C)
+        x = tok_emb + pos_emb # (B,T,C)
+        logits = self.lm_head(x) # (B,T,vocab_size)
 
         if targets is None:
             loss = None
@@ -104,7 +112,7 @@ class BigramLanguageModel(nn.Module):
             idx = torch.cat([idx, idx_next], dim=1) # (B, T+1)
         return idx
     
-model = BigramLanguageModel()
+model = MyTransformer()
 m = model.to(device)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
